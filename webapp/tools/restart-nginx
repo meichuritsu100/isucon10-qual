@@ -1,0 +1,7 @@
+#!/bin/bash
+
+set -eu
+
+sudo truncate -s 0 -c /var/log/nginx/access.log
+
+sudo systemctl restart nginx
