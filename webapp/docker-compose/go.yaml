@@ -14,7 +14,8 @@ services:
       MYSQL_USER: isucon
       MYSQL_PASSWORD: isucon
     ports:
-      - "3306:3306"
+      - "21342:21342"
+     #- "3306:3306"
 
   api-server:
     build: ../go
