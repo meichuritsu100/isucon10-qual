@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -249,6 +250,7 @@ func main() {
 	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.Use(botFilter) // botのリクエストを弾く
 
 	e.GET("/debug/pprof/*", echo.WrapHandler(http.DefaultServeMux))
 
@@ -315,6 +317,30 @@ func initialize(c echo.Context) error {
 	return c.JSON(http.StatusOK, InitializeResponse{
 		Language: "go",
 	})
+}
+
+func botFilter(next echo.HandlerFunc) echo.HandlerFunc {
+	botregexps := []*regexp.Regexp{
+		regexp.MustCompile(`/ISUCONbot(-Mobile)?/`),
+		regexp.MustCompile(`/ISUCONbot-Image\//`),
+		regexp.MustCompile(`/Mediapartners-ISUCON/`),
+		regexp.MustCompile(`/ISUCONCoffee/`),
+		regexp.MustCompile(`/ISUCONFeedSeeker(Beta)?/`),
+		regexp.MustCompile(`/crawler \(https:\/\/isucon\.invalid\/(support\/faq\/|help\/jp\/)/`),
+		regexp.MustCompile(`/isubot/`),
+		regexp.MustCompile(`/Isupider/`),
+		regexp.MustCompile(`/Isupider(-image)?\+/`),
+		regexp.MustCompile(`/(bot|crawler|spider)(?:[-_ .\/;@()]|$)/i`),
+	}
+	return func(c echo.Context) error {
+		// User-Agentが正規表現にマッチすれば503を返す
+		for _, botregexp := range botregexps {
+			if botregexp.MatchString(c.Request().UserAgent()) {
+				return c.NoContent(http.StatusServiceUnavailable)
+			}
+		}
+		return next(c)
+	}
 }
 
 func getChairDetail(c echo.Context) error {
@@ -871,7 +897,7 @@ func searchEstateNazotte(c echo.Context) error {
 	query := fmt.Sprintf(`SELECT * FROM estate WHERE ST_Contains(ST_PolygonFromText(%s), POINT(latitude, longitude)) ORDER BY popularity DESC, id ASC`, polygon)
 	err = db.Select(&estatesInPolygon, query)
 	if err == sql.ErrNoRows {
-		c.Echo().Logger.Infof("select * from estate where latitude ...", err)
+		c.Echo().Logger.Infof("select * from estate where ST_Contains( ...", err)
 		return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
 	} else if err != nil {
 		c.Echo().Logger.Errorf("database execution error : %v", err)
